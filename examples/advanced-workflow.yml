@@ -1,0 +1,88 @@
+name: Penetrify Multi-Environment Scan
+
+on:
+  pull_request:
+    branches: [main, develop]
+  deployment_status:
+
+jobs:
+  # Quick scan on PRs — fast feedback
+  pr-quick-scan:
+    if: github.event_name == 'pull_request'
+    name: Quick Security Scan (PR)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Penetrify Quick Scan
+        id: scan
+        uses: penetrify/penetrify-action@v1
+        with:
+          api-key: ${{ secrets.PENETRIFY_API_KEY }}
+          application-id: ${{ secrets.PENETRIFY_APP_ID }}
+          target: 'https://preview-${{ github.event.pull_request.number }}.your-app.com'
+          scan-type: 'quick'
+          severity-threshold: 'critical'
+
+      - name: Comment PR with Results
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ steps.scan.outputs.status }}';
+            const testId = '${{ steps.scan.outputs.test-id }}';
+            const total = '${{ steps.scan.outputs.findings-count }}';
+            const critical = '${{ steps.scan.outputs.critical-count }}';
+            const high = '${{ steps.scan.outputs.high-count }}';
+            const reportUrl = '${{ steps.scan.outputs.report-url }}';
+            const icon = critical > 0 ? '🔴' : high > 0 ? '🟡' : '🟢';
+
+            const body = `## ${icon} Penetrify Security Scan
+
+            | Severity | Count |
+            |----------|-------|
+            | Critical | ${critical} |
+            | High | ${high} |
+            | Total | ${total} |
+
+            **Status:** ${status}
+            **Full Report:** [View on Penetrify](${reportUrl})
+
+            <sub>Powered by [Penetrify](https://penetrify.cloud) — AI-driven penetration testing</sub>`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  # Full scan post-deployment to staging
+  staging-full-scan:
+    if: >
+      github.event_name == 'deployment_status' &&
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'staging'
+    name: Full Security Scan (Staging)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Penetrify Full Scan
+        uses: penetrify/penetrify-action@v1
+        with:
+          api-key: ${{ secrets.PENETRIFY_API_KEY }}
+          application-id: ${{ secrets.PENETRIFY_APP_ID }}
+          target: 'https://staging.your-app.com'
+          scan-type: 'deep'
+          severity-threshold: 'high'
+          timeout: '3600'

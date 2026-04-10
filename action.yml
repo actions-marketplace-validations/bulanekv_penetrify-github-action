@@ -1,0 +1,110 @@
+name: 'Penetrify Security Scan'
+description: 'AI-driven autonomous penetration testing for your applications. Finds vulnerabilities before attackers do.'
+author: 'Penetrify (Algofy s.r.o.)'
+
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  api-key:
+    description: 'Penetrify API key (use GitHub Secrets)'
+    required: true
+
+  application-id:
+    description: 'Penetrify application ID to run the test against'
+    required: true
+
+  target:
+    description: 'Target URL to scan (overrides application default if set)'
+    required: false
+    default: ''
+
+  scan-type:
+    description: 'Scan mode: quick (0.5 credits), automatic (1 credit), deep (2 credits)'
+    required: false
+    default: 'automatic'
+    # Options: quick, automatic, deep
+
+  severity-threshold:
+    description: 'Minimum severity to fail the build (critical, high, medium, low, info)'
+    required: false
+    default: 'high'
+
+  wait-for-results:
+    description: 'Wait for scan to complete (true) or just trigger it (false)'
+    required: false
+    default: 'true'
+
+  timeout:
+    description: 'Maximum time to wait for scan results in seconds'
+    required: false
+    default: '1800'
+
+  upload-sarif:
+    description: 'Upload SARIF results to GitHub Security tab'
+    required: false
+    default: 'true'
+
+outputs:
+  test-id:
+    description: 'Unique identifier of the triggered test'
+    value: ${{ steps.scan.outputs.test-id }}
+
+  status:
+    description: 'Final scan status (completed, failed, timeout)'
+    value: ${{ steps.scan.outputs.status }}
+
+  findings-count:
+    description: 'Total number of findings'
+    value: ${{ steps.scan.outputs.findings-count }}
+
+  critical-count:
+    description: 'Number of critical severity findings'
+    value: ${{ steps.scan.outputs.critical-count }}
+
+  high-count:
+    description: 'Number of high severity findings'
+    value: ${{ steps.scan.outputs.high-count }}
+
+  report-url:
+    description: 'URL to full scan report on penetrify.cloud'
+    value: ${{ steps.scan.outputs.report-url }}
+
+  sarif-file:
+    description: 'Path to generated SARIF file'
+    value: ${{ steps.sarif.outputs.sarif-file }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Penetrify Scan
+      shell: bash
+      id: scan
+      env:
+        PENETRIFY_API_KEY: ${{ inputs.api-key }}
+      run: |
+        ${{ github.action_path }}/src/run-scan.sh \
+          --application-id "${{ inputs.application-id }}" \
+          --target "${{ inputs.target }}" \
+          --scan-type "${{ inputs.scan-type }}" \
+          --severity-threshold "${{ inputs.severity-threshold }}" \
+          --wait "${{ inputs.wait-for-results }}" \
+          --timeout "${{ inputs.timeout }}" \
+          --output-dir "${{ runner.temp }}/penetrify-results"
+
+    - name: Generate SARIF Report
+      if: inputs.upload-sarif == 'true' && steps.scan.outputs.status == 'completed'
+      shell: bash
+      id: sarif
+      run: |
+        ${{ github.action_path }}/src/generate-sarif.sh \
+          --results-dir "${{ runner.temp }}/penetrify-results" \
+          --output "${{ runner.temp }}/penetrify-results/results.sarif"
+
+    - name: Upload SARIF to GitHub Security
+      if: inputs.upload-sarif == 'true' && steps.scan.outputs.status == 'completed'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ runner.temp }}/penetrify-results/results.sarif
+        category: penetrify

@@ -1,0 +1,48 @@
+name: Security Scan with Penetrify
+
+on:
+  # Run on every push to main
+  push:
+    branches: [main]
+  # Run on PRs targeting main
+  pull_request:
+    branches: [main]
+  # Optional: scheduled weekly scan
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 6 AM UTC
+
+jobs:
+  penetrify-scan:
+    name: Penetrify Security Scan
+    runs-on: ubuntu-latest
+    # Required for SARIF upload to GitHub Security tab
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Penetrify Scan
+        id: scan
+        uses: penetrify/penetrify-action@v1
+        with:
+          api-key: ${{ secrets.PENETRIFY_API_KEY }}
+          application-id: ${{ secrets.PENETRIFY_APP_ID }}
+          target: 'https://staging.your-app.com'
+          scan-type: 'automatic'
+          severity-threshold: 'high'
+
+      - name: Print Summary
+        if: always()
+        run: |
+          echo "## Penetrify Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ${{ steps.scan.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Total Findings | ${{ steps.scan.outputs.findings-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Critical | ${{ steps.scan.outputs.critical-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| High | ${{ steps.scan.outputs.high-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Report | ${{ steps.scan.outputs.report-url }} |" >> $GITHUB_STEP_SUMMARY

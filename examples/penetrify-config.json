@@ -1,0 +1,35 @@
+{
+  "scan": {
+    "max_depth": 10,
+    "max_pages": 100,
+    "follow_redirects": true,
+    "user_agent": "Penetrify/1.0 (CI/CD Scanner)"
+  },
+  "authentication": {
+    "type": "bearer",
+    "token_env": "APP_AUTH_TOKEN"
+  },
+  "scope": {
+    "include_paths": ["/api/*", "/app/*"],
+    "exclude_paths": ["/api/health", "/api/docs"],
+    "exclude_parameters": ["csrf_token"]
+  },
+  "checks": {
+    "enabled": [
+      "sql_injection",
+      "xss",
+      "csrf",
+      "auth_bypass",
+      "idor",
+      "ssrf",
+      "open_redirect",
+      "header_injection",
+      "api_security"
+    ],
+    "disabled": []
+  },
+  "rate_limiting": {
+    "requests_per_second": 20,
+    "concurrent_connections": 5
+  }
+}
